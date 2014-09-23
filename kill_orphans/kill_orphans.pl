@@ -55,12 +55,12 @@ $log->add(
 # Exceptions:
 my @exception=qw(sshd dbus encfs SCREEN ssh-agent dropbox);
 # LDAP:
-my $ldap_server='';
+my $ldap_server='',
 my $ldap_bind_user='',
 my $ldap_bind_password='',
 # E-mail
 # Default e-mail address (and also for From:)
-my $from= "arnau.bria\@';
+my $from= "arnau.bria',
 # Default Subject:
 # Default e-mail content :
 my $template="You are getting this e-mail because some of your processes are running in $hostname without control.\nPlease, refer to http://www.linux.crg.es/index.php/FAQ#Why_am_I_getting_an_e-mail_about_orphan_processes_in_ant-login_nodes.3F for futher details.\nThe list of orphan PIDs:\n"; 
@@ -220,7 +220,7 @@ kill_orphan - Kill orphan processess
 =head1 SYNOPSIS
 
 B<kill_orphan>
-[OPTION] INPUT_FILE
+[OPTION] 
 
         --help,-h       : display this help
         --man           : show man 
@@ -236,7 +236,8 @@ B<kill_orphan>
 
 =head1 DESCRIPTION
 
-This script is designed to detect orphan processes in any host.
+The script finds  orphan processes in a GNU/Linux host.
+It can list the processes, kill them or send aa detailed e-mail to the owner of the process (the e-mail is asked to a LDAP server).
 
 =head2 CONFIG OPTIONS
 
