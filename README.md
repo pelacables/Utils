@@ -6,8 +6,7 @@
 This script finds  orphan processes in a GNU/Linux host.
 It can list the processes, kill them or send aa detailed e-mail to the owner of the process (the e-mail is asked to a LDAP server).
 
-
-Usage:
+ Usage:
     kill_orphan [OPTION] INPUT_FILE
 
             --help,-h       : display this help
