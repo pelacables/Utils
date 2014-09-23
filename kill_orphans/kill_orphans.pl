@@ -55,12 +55,12 @@ $log->add(
 # Exceptions:
 my @exception=qw(sshd dbus encfs SCREEN ssh-agent dropbox);
 # LDAP:
-my $ldap_server='allende.crg.es';
-my $ldap_bind_user='crgcomu@crg';
-my $ldap_bind_password='crgcomu';
+my $ldap_server='';
+my $ldap_bind_user='',
+my $ldap_bind_password='',
 # E-mail
 # Default e-mail address (and also for From:)
-my $from= "arnau.bria\@crg.es";
+my $from= "arnau.bria\@';
 # Default Subject:
 # Default e-mail content :
 my $template="You are getting this e-mail because some of your processes are running in $hostname without control.\nPlease, refer to http://www.linux.crg.es/index.php/FAQ#Why_am_I_getting_an_e-mail_about_orphan_processes_in_ant-login_nodes.3F for futher details.\nThe list of orphan PIDs:\n"; 
@@ -139,7 +139,7 @@ sub look_for_email () {
 	my $ldap_mesg = $ldap->bind ( "$ldap_bind_user", password => "$ldap_bind_password", version => 3 );
 	$ldap_mesg = $ldap->search( # perform a search
                         base   => "OU=Programes,DC=crg,DC=es",
-                        filter => "sAMAccountName=abria",
+                        filter => "sAMAccountName=*",
 			attrs	=> ['sAMAccountName','mail'],
                       );
 	$ldap_mesg->code && die $ldap_mesg->error;
