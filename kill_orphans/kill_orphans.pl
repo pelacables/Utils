@@ -34,7 +34,7 @@ GetOptions (
 
 pod2usage(1) if $help;
 pod2usage(-verbose => 2) if $man;
-pod2usage(1) if ($mode !~ /assassin|informer|list/);
+pod2usage(1) if ($mode !~ /assassin|informer|notifier|list/);
 
 # Logging
 my $hostname=`hostname -f`;
@@ -53,14 +53,15 @@ $log->add(
 # Configurable values:
 # Processes
 # Exceptions:
-my @exception=qw(sshd dbus encfs SCREEN ssh-agent dropbox);
+my @exception=qw(dbus encfs SCREEN ssh-agent dropbox gconfd-2 kdeinit4 kded4 gam_server knotify4);
 # LDAP:
-my $ldap_server='',
-my $ldap_bind_user='',
-my $ldap_bind_password='',
+my $ldap_server='';
+my $ldap_bind_user='';
+my $ldap_bind_password='';
 # E-mail
 # Default e-mail address (and also for From:)
-my $from= "arnau.bria',
+my $from= "arnau.bria\@";
+my $default_admin= "arnau.bria\@";
 # Default Subject:
 # Default e-mail content :
 my $template="You are getting this e-mail because some of your processes are running in $hostname without control.\nPlease, refer to http://www.linux.crg.es/index.php/FAQ#Why_am_I_getting_an_e-mail_about_orphan_processes_in_ant-login_nodes.3F for futher details.\nThe list of orphan PIDs:\n"; 
@@ -90,7 +91,7 @@ foreach my $proc ( @{$pt->table} ) {
 
 sub is_not_exception () {
 	foreach (@exception) {
-		if ($_[0] =~ $_){
+		if ($_[0] =~ $_ ){
 			return 0;	
 		}
 	}
@@ -105,16 +106,21 @@ sub look_for_orphan () {
 		# Some human readable vars:
 		my $PPID_UID=$pt_hash->{$pt_hash->{$pid}->{ppid}}->{uid};
 		my $cmndline=$pt_hash->{$pid}->{cmndline};
+		my $p_cmndline=$pt_hash->{$pt_hash->{$pid}->{ppid}}->{cmndline};
 		my $orph_pid=$pid;
 		my $orphan=1;
 		while ($orphan) {
 			# get pid's ppid
 			$log->debug("PID: $orph_pid PPID: $pt_hash->{$orph_pid}->{ppid}, UID: $pt_hash->{$pt_hash->{$orph_pid}->{ppid}}->{uid}, EXEC: $pt_hash->{$orph_pid}->{cmndline} , PEXEC: $pt_hash->{$pt_hash->{$orph_pid}->{ppid}}->{cmndline}");
-			if (($PPID_UID  ==  '0' ) && (&is_not_exception ($cmndline))) {
+			#if ( (($PPID_UID  ==  '0' ) && ($p_cmndline !~ /.*sshd.*/)) || (($PPID_UID  ==  '0' ) && (&is_not_exception ($cmndline))) ){
+			if ( ($PPID_UID  ==  '0' ) && (($p_cmndline !~ /^sshd|^CROND/) &&  (&is_not_exception ($cmndline))) ){
+			# sshd: mcorrales@notty
+			#  ( (		1	) && ( ( 
 				my $user=getpwuid($pt_hash->{$orph_pid}->{uid});
 				$orphan_process->{$user}->{PIDs}->{$orph_pid}->{cmd}=$cmndline;
+				$orphan_process->{$user}->{PIDs}->{$orph_pid}->{pcmd}=$p_cmndline;
 				$orphan_process->{$user}->{PIDs}->{$orph_pid}->{date}=strftime('%d/%m/%Y', localtime($pt_hash->{$pid}->{start}));
-				$log->info("Found PID: $orph_pid with command $cmndline from user:  $user");
+				$log->info("Found PID: $orph_pid with command $cmndline from user:  $user (AND $p_cmndline)");
 				# It's an orphan process:
 				$orphan=0;
 			}else{
@@ -138,7 +144,7 @@ sub look_for_email () {
 	my $ldap = Net::LDAP->new ( "$ldap_server" ) or die "$@";
 	my $ldap_mesg = $ldap->bind ( "$ldap_bind_user", password => "$ldap_bind_password", version => 3 );
 	$ldap_mesg = $ldap->search( # perform a search
-                        base   => "OU=Programes,DC=crg,DC=es",
+                        base   => "",
                         filter => "sAMAccountName=*",
 			attrs	=> ['sAMAccountName','mail'],
                       );
@@ -165,7 +171,7 @@ if ($mode == 'informer'){
 
 # Now will all the info in our hash 'orphan_process' we check the mode: assassin/informer/list
 for my $orphan_user (keys %$orphan_process) {
-	if ($mode == 'informer'){
+	if ($mode =~ /informer|notifier/){
         	my $subject="Orphan processes from $orphan_user in $hostname";
 		my $to;
 		if (defined $orphan_process->{$orphan_user}->{mail}) {
@@ -174,6 +180,8 @@ for my $orphan_user (keys %$orphan_process) {
 			$log->info("WARNING: $orphan_user has no e-mail\n");
        			$to=$from;
 		}
+		# In mode notifier we overwrite to and sen the e-mail to $admin_address
+		if ($mode eq 'informer' ) { $to=$default_admin; $subject.=" (informer mode)";}
 		$log->debug("Sending e-mail to user: $orphan_user with e-mail: $to");
        		open(MAIL, "|/usr/sbin/sendmail -t");
 		print MAIL "To: $to\n";
@@ -189,17 +197,18 @@ for my $orphan_user (keys %$orphan_process) {
 			print MAIL "PID: $PID, command: $orphan_process->{$orphan_user}->{PIDs}->{$PID}->{cmd} (started on $orphan_process->{$orphan_user}->{PIDs}->{$PID}->{date})\n";
 		}
 		elsif ($mode eq 'list'){
-			print "PID: $PID, command: $orphan_process->{$orphan_user}->{PIDs}->{$PID}->{cmd} belonging to $orphan_user (started on $orphan_process->{$orphan_user}->{PIDs}->{$PID}->{date})\n";
+			print "PID: $PID, command: $orphan_process->{$orphan_user}->{PIDs}->{$PID}->{cmd} belonging to $orphan_user (started on $orphan_process->{$orphan_user}->{PIDs}->{$PID}->{date}) Pcmd:$orphan_process->{$orphan_user}->{PIDs}->{$PID}->{pcmd}.\n";
 		}
 		elsif ($mode eq 'assassin') {
 			$log->info("Killing PID: $PID (command $orphan_process->{$orphan_user}->{PIDs}->{$PID}->{cmd}) belonging to $orphan_user");
 			print "kill -9 $PID (Killing PID: $PID with command $orphan_process->{$orphan_user}->{PIDs}->{$PID}->{cmd}) (started on $orphan_process->{$orphan_user}->{PIDs}->{$PID}->{date})\n";
 		}
 	}
-	if ($mode == 'informer'){
+	if ($mode =~ /informer|notifier/){
 		close(MAIL);
 	}
 }
+# If you want to see the content of $orphan_process hash, uncomment this line:
 #print Dumper \$orphan_process;
 sub VersionMessage {
         print "version: 0.0.1\n\n";
@@ -224,8 +233,9 @@ B<kill_orphan>
 
         --help,-h       : display this help
         --man           : show man 
-        --mode		: [informer|assassin|list]
-                        - informer: send e-mail to user which have orphan processes
+        --mode		: [informer|notifier|assassin|list]
+                        - informer: send e-mail to $default_admin
+                        - notifier: send e-mail to user
                         - assassin: kill orphan processes
                         - list: sho the list of orphan processes in STDOUT
 
@@ -236,7 +246,7 @@ B<kill_orphan>
 
 =head1 DESCRIPTION
 
-The script finds  orphan processes in a GNU/Linux host.
+This script is designed to detect orphan processes in a GNU/Linux host.
 It can list the processes, kill them or send aa detailed e-mail to the owner of the process (the e-mail is asked to a LDAP server).
 
 =head2 CONFIG OPTIONS
@@ -244,19 +254,19 @@ It can list the processes, kill them or send aa detailed e-mail to the owner of 
 Starting at line 53 (aprox) you'll find some values that can/must be changed:
 
 # Configurable values:
-# Processes
-# Exceptions:
-my @exception=qw(sshd dbus encfs SCREEN ssh-agent dropbox);
-# LDAP:
-my $ldap_server='allende.crg.es';
-my $ldap_bind_user='crgcomu@crg';
-my $ldap_bind_password='crgcomu';
-# E-mail
-# Default e-mail address (and also for From:)
-my $from= "arnau.bria\@crg.es";
-# Default Subject:
-# Default e-mail content :
-my $template="You are getting this e-mail because some of your processes are running in $hostname without control.\nPlease, refer to http://www.linux.crg.es/index.php/FAQ#Why_am_I_getting_an_e-mail_about_orphan_processes_in_ant-login_nodes.3F for futher details.\nThe list of orphan PIDs:\n"; 
+Processes
+Exceptions:
+@exception=qw(sshd dbus encfs SCREEN ssh-agent dropbox);
+LDAP:
+$ldap_server='allende.crg.es';
+$ldap_bind_user='crgcomu@crg';
+$ldap_bind_password='crgcomu';
+E-mail
+Default e-mail address (and also for From:)
+$from= "arnau.bria\@crg.es";
+Default Subject:
+Default e-mail content :
+$template="You are getting this e-mail because some of your processes are running in $hostname without control.\nPlease, refer to http://www.linux.crg.es/index.php/FAQ#Why_am_I_getting_an_e-mail_about_orphan_processes_in_ant-login_nodes.3F for futher details.\nThe list of orphan PIDs:\n"; 
 
 =head2 LOG
 It automatically logs in /var/log/orphan_processes.log
